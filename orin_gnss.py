@@ -7,7 +7,7 @@ import sys
 # USB: /dev/ttyUSB0 or /dev/ttyACM0
 # GPIO Pins 8/10: /dev/ttyTHS1 (Orin Nano JetPack 6)
 SERIAL_PORT = '/dev/ttyTHS1' 
-BAUD_RATE = 4800
+BAUD_RATE = 9600
 TIMEOUT = 1
 DEBUG_MODE = True  # Set to True to see all raw NMEA sentences
 
