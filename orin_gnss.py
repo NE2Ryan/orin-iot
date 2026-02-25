@@ -5,8 +5,8 @@ import sys
 # --- Configuration ---
 # Update this port based on your connection:
 # USB: /dev/ttyUSB0 or /dev/ttyACM0
-# GPIO Pins 8/10: /dev/ttyTHS0
-SERIAL_PORT = '/dev/ttyTHS0' 
+# GPIO Pins 8/10: /dev/ttyTHS1 (Orin Nano)
+SERIAL_PORT = '/dev/ttyTHS1' 
 BAUD_RATE = 9600
 TIMEOUT = 1
 
