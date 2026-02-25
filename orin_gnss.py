@@ -1,88 +1,120 @@
 import serial
 import time
 import sys
+from collections import deque
 
 # --- Configuration ---
-# Update this port based on your connection:
-# USB: /dev/ttyUSB0 or /dev/ttyACM0
-# GPIO Pins 8/10: /dev/ttyTHS1 (Orin Nano JetPack 6)
 SERIAL_PORT = '/dev/ttyTHS1' 
 BAUD_RATE = 9600
-TIMEOUT = 1
-DEBUG_MODE = True  # Set to True to see all raw NMEA sentences
+TIMEOUT = 0.1  # Low timeout for responsive character reading
+
+class GNSSState:
+    def __init__(self):
+        self.lat = 0.0
+        self.lon = 0.0
+        self.sats = 0
+        self.fix_quality = 0
+        self.speed_knots = 0.0
+        self.last_update = "N/A"
+        self.raw_lines = deque(maxlen=10)
+        self.total_chars = 0
+        self.last_char_time = time.time()
 
 def parse_nmea_coord(value, direction):
     """Converts NMEA DDMM.MMMM to decimal degrees."""
     if not value or not direction:
-        return None
+        return 0.0
     try:
-        # Latitude is DDMM.MMMM (2 digits for deg)
-        # Longitude is DDDMM.MMMM (3 digits for deg)
         dot_idx = value.find('.')
-        if dot_idx < 0:
-            return None
-            
         dd = int(value[:dot_idx-2])
         mm = float(value[dot_idx-2:])
         decimal = dd + (mm / 60)
         if direction in ['S', 'W']:
             decimal = -decimal
         return decimal
-    except Exception:
-        return None
+    except:
+        return 0.0
+
+def update_dashboard(state):
+    """Prints a non-scrolling dashboard to the terminal."""
+    sys.stdout.write("\033[H\033[J")
+    
+    status = "FIXED" if state.fix_quality > 0 else "WAITING"
+    color = "\033[92m" if state.fix_quality > 0 else "\033[93m"
+    reset = "\033[0m"
+
+    print("="*40)
+    print(f" JETSON ORIN GNSS MONITOR ({SERIAL_PORT})")
+    print("="*40)
+    print(f" Status:    {color}{status}{reset}")
+    print(f" Satellites: {state.sats}")
+    print(f" Latitude:  {state.lat:.6f}")
+    print(f" Longitude: {state.lon:.6f}")
+    print(f" Speed:     {state.speed_knots * 1.852:.2f} km/h")
+    print(f" Last Sync: {state.last_update}")
+    print(f" Bytes In:  {state.total_chars}")
+    print("="*40)
+    print(" RECENT RAW DATA:")
+    for r_line in state.raw_lines:
+        print(f" {r_line}")
+    print("="*40)
+    print(" Press Ctrl+C to exit")
 
 def main():
-    print(f"Connecting to GNSS on {SERIAL_PORT} at {BAUD_RATE} baud...")
+    state = GNSSState()
+    buffer = ""
     
     try:
-        # Initialize Serial
         ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=TIMEOUT)
-    except serial.SerialException as e:
-        print(f"Error: Could not open serial port {SERIAL_PORT}: {e}")
-        print("Hint: Check if the device is plugged in or try /dev/ttyACM0")
-        sys.exit(1)
+    except Exception as e:
+        print(f"Error: Could not open {SERIAL_PORT}: {e}")
+        return
 
-    print("Waiting for GNSS data... (Press Ctrl+C to stop)")
-    
     try:
         while True:
+            # Read character by character to avoid buffer split issues
             if ser.in_waiting > 0:
-                line = ser.readline()
-                try:
-                    # Decode bytes to string
-                    decoded_line = line.decode('ascii', errors='replace').strip()
-                    
-                    if DEBUG_MODE:
-                        print(f"RAW: {decoded_line}")
-
-                    if decoded_line.startswith('$'):
-                        parts = decoded_line.split(',')
-                        
-                        # Look for $GPGGA or $GNGGA for position data
-                        if parts[0] in ['$GPGGA', '$GNGGA'] and len(parts) >= 10:
-                            lat_raw = parts[2]
-                            lat_dir = parts[3]
-                            lon_raw = parts[4]
-                            lon_dir = parts[5]
-                            fix_quality = parts[6]
-                            sats = parts[7]
-                            
-                            if fix_quality != '0':  # '0' means no fix
-                                lat = parse_nmea_coord(lat_raw, lat_dir)
-                                lon = parse_nmea_coord(lon_raw, lon_dir)
-                                if lat is not None and lon is not None:
-                                    print(f"[{parts[0]}] FIX: Lat {lat:.6f}, Lon {lon:.6f}, Sats {sats}")
-                            else:
-                                print(f"[{parts[0]}] WAITING: No Fix (Sats: {sats})")
+                char_bytes = ser.read(1)
+                if char_bytes:
+                    state.total_chars += 1
+                    try:
+                        char = char_bytes.decode('ascii', errors='replace')
+                        if char == '\n' or char == '\r':
+                            if buffer.strip().startswith('$'):
+                                line = buffer.strip()
+                                state.raw_lines.append(line)
                                 
-                except Exception as e:
-                    # Ignore occasional decoding errors
-                    pass
-            
-            time.sleep(0.1)
+                                parts = line.split(',')
+                                header = parts[0]
+                                
+                                if header in ['$GPGGA', '$GNGGA'] and len(parts) >= 10:
+                                    state.fix_quality = int(parts[6]) if parts[6] and parts[6].isdigit() else 0
+                                    state.sats = int(parts[7]) if parts[7] and parts[7].isdigit() else 0
+                                    if state.fix_quality > 0:
+                                        state.lat = parse_nmea_coord(parts[2], parts[3])
+                                        state.lon = parse_nmea_coord(parts[4], parts[5])
+                                        state.last_update = time.strftime("%H:%M:%S")
+
+                                elif header in ['$GPRMC', '$GNRMC'] and len(parts) >= 9:
+                                    if parts[2] == 'A':
+                                        state.speed_knots = float(parts[7]) if parts[7] else 0.0
+                                        state.lat = parse_nmea_coord(parts[3], parts[4])
+                                        state.lon = parse_nmea_coord(parts[5], parts[6])
+                                        state.last_update = time.strftime("%H:%M:%S")
+                            
+                            buffer = "" # Reset buffer for next line
+                        else:
+                            buffer += char
+                    except:
+                        pass # Ignore decoding noise
+
+            # Throttle UI update to ~10Hz
+            if time.time() - state.last_char_time > 0.1:
+                update_dashboard(state)
+                state.last_char_time = time.time()
             
     except KeyboardInterrupt:
-        print("Stopping GNSS monitor...")
+        print("\nStopping GNSS monitor...")
     finally:
         ser.close()
 
