@@ -2,6 +2,7 @@ import serial
 import time
 import sys
 import os
+from collections import deque
 
 # --- Configuration ---
 SERIAL_PORT = '/dev/ttyTHS1' 
@@ -16,6 +17,7 @@ class GNSSState:
         self.fix_quality = 0
         self.speed_knots = 0.0
         self.last_update = "N/A"
+        self.raw_lines = deque(maxlen=10)
 
 def parse_nmea_coord(value, direction):
     """Converts NMEA DDMM.MMMM to decimal degrees."""
@@ -51,6 +53,10 @@ def update_dashboard(state):
     print(f" Speed:     {state.speed_knots * 1.852:.2f} km/h")
     print(f" Last Sync: {state.last_update}")
     print("="*40)
+    print(" RECENT RAW DATA:")
+    for r_line in state.raw_lines:
+        print(f" {r_line}")
+    print("="*40)
     print(" Press Ctrl+C to exit")
 
 def main():
@@ -67,6 +73,9 @@ def main():
             if ser.in_waiting > 0:
                 line = ser.readline().decode('ascii', errors='replace').strip()
                 
+                if line:
+                    state.raw_lines.append(line)
+
                 if line.startswith('$'):
                     parts = line.split(',')
                     header = parts[0]
