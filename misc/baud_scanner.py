@@ -19,8 +19,7 @@ def scan():
                 # Try to print a decoded line
                 try:
                     start_idx = data.find(b'$')
-                    end_idx = data.find(b'
-', start_idx)
+                    end_idx = data.find(b'', start_idx)
                     if end_idx > start_idx:
                         print(f"Sample: {data[start_idx:end_idx].decode('ascii', errors='replace')}")
                 except:
