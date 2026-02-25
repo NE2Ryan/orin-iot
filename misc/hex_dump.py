@@ -16,8 +16,7 @@ def main():
                 ascii_str = ''.join([chr(b) if 32 <= b <= 126 else '.' for b in data])
                 print(f"{hex_str}  |{ascii_str}|")
     except KeyboardInterrupt:
-        print("
-Stopping...")
+        print("Stopping...")
     except Exception as e:
         print(f"Error: {e}")
     finally:
