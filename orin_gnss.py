@@ -5,10 +5,11 @@ import sys
 # --- Configuration ---
 # Update this port based on your connection:
 # USB: /dev/ttyUSB0 or /dev/ttyACM0
-# GPIO Pins 8/10: /dev/ttyTHS1 (Orin Nano)
+# GPIO Pins 8/10: /dev/ttyTHS1 (Orin Nano JetPack 6)
 SERIAL_PORT = '/dev/ttyTHS1' 
 BAUD_RATE = 9600
 TIMEOUT = 1
+DEBUG_MODE = True  # Set to True to see all raw NMEA sentences
 
 def parse_nmea_coord(value, direction):
     """Converts NMEA DDMM.MMMM to decimal degrees."""
@@ -51,6 +52,9 @@ def main():
                     # Decode bytes to string
                     decoded_line = line.decode('ascii', errors='replace').strip()
                     
+                    if DEBUG_MODE:
+                        print(f"RAW: {decoded_line}")
+
                     if decoded_line.startswith('$'):
                         parts = decoded_line.split(',')
                         
