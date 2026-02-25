@@ -78,8 +78,7 @@ def main():
             time.sleep(0.1)
             
     except KeyboardInterrupt:
-        print("
-Stopping GNSS monitor...")
+        print("Stopping GNSS monitor...")
     finally:
         ser.close()
 
