@@ -3,8 +3,10 @@ import time
 import sys
 
 # --- Configuration ---
-# Update this port based on your dmesg output (usually /dev/ttyUSB0 or /dev/ttyACM0)
-SERIAL_PORT = '/dev/ttyUSB0' 
+# Update this port based on your connection:
+# USB: /dev/ttyUSB0 or /dev/ttyACM0
+# GPIO Pins 8/10: /dev/ttyTHS0
+SERIAL_PORT = '/dev/ttyTHS0' 
 BAUD_RATE = 9600
 TIMEOUT = 1
 
