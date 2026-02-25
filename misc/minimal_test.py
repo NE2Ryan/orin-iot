@@ -16,8 +16,7 @@ def main():
                 sys.stdout.write(char.decode('ascii', errors='replace'))
                 sys.stdout.flush()
     except KeyboardInterrupt:
-        print("
-Stopping...")
+        print("Stopping...")
     finally:
         if 'ser' in locals():
             ser.close()
