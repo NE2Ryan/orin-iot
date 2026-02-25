@@ -2,6 +2,7 @@ from machine import Pin, I2C, UART
 import ssd1306
 import mpu6500
 import ak8963
+import json
 import time
 import math
 
@@ -15,7 +16,7 @@ MAG_SCALE = (1.029, 1.025, 0.950)
 DECLINATION = 0.0 
 
 # --- Global State ---
-gnss = {"lat": 0.0, "lon": 0.0, "sats": "0", "fix": False}
+gnss = {"lat": 0.0, "lon": 0.0, "alt": 0.0, "sats": "0", "fix": False}
 
 # --- Initialization ---
 i2c = I2C(1, sda=Pin(I2C_SDA), scl=Pin(I2C_SCL))
@@ -44,7 +45,10 @@ def update_gps():
                 p = msg.split(',')
                 gnss["sats"] = p[7]
                 if p[6] != '0':
-                    gnss["lat"], gnss["lon"], gnss["fix"] = parse_coord(p[2], p[3]), parse_coord(p[4], p[5]), True
+                    gnss["lat"] = parse_coord(p[2], p[3])
+                    gnss["lon"] = parse_coord(p[4], p[5])
+                    gnss["alt"] = float(p[9]) if p[9] else 0.0
+                    gnss["fix"] = True
                 else: gnss["fix"] = False
         except: pass
 
@@ -82,20 +86,43 @@ def main():
         update_gps()
         acc = imu.acceleration
         m = mag.magnetic
-        heading = 0
+        
+        # Calculate Tilt (Pitch/Roll)
+        ax, ay, az = acc
+        roll = math.degrees(math.atan2(ay, az))
+        pitch = math.degrees(math.atan2(-ax, math.sqrt(ay*ay + az*az)))
+        
+        heading = 0.0
         if m:
-            ax, ay, az = acc
-            roll, pitch = math.atan2(ay, az), math.atan2(-ax, math.sqrt(ay*ay + az*az))
+            # Re-calculate roll/pitch in radians for heading compensation
+            r_rad, p_rad = math.atan2(ay, az), math.atan2(-ax, math.sqrt(ay*ay + az*az))
             mx = (m[0]-MAG_BIAS[0])*MAG_SCALE[0]
             my = (m[1]-MAG_BIAS[1])*MAG_SCALE[1]
             mz = (m[2]-MAG_BIAS[2])*MAG_SCALE[2]
-            mx_h = mx*math.cos(pitch) + mz*math.sin(pitch)
-            my_h = mx*math.sin(roll)*math.sin(pitch) + my*math.cos(roll) - mz*math.sin(roll)*math.cos(pitch)
-            # Use user-discovered axis swap
+            
+            mx_h = mx*math.cos(p_rad) + mz*math.sin(p_rad)
+            my_h = mx*math.sin(r_rad)*math.sin(p_rad) + my*math.cos(r_rad) - mz*math.sin(r_rad)*math.cos(p_rad)
             heading = (math.degrees(math.atan2(mx_h, my_h)) + DECLINATION) % 360
         
+        # Prepare data package
+        data = {
+            "heading": round(heading, 2),
+            "pitch": round(pitch, 2),
+            "roll": round(roll, 2),
+            "lat": gnss["lat"],
+            "lon": gnss["lon"],
+            "alt": gnss["alt"],
+            "fix": gnss["fix"],
+            "sats": int(gnss["sats"])
+        }
+        
+        # Output JSON to Serial
+        print(json.dumps(data))
+        
+        # Update OLED
         draw_ui(heading, acc)
-        time.sleep(0.05)
+        
+        time.sleep(0.1) # 10Hz output
 
 if __name__ == "__main__":
     main()
